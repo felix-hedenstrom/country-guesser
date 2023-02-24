@@ -1,0 +1,62 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: coursier/cache-action@v6
+      - uses: olafurpg/setup-scala@v12
+
+      - uses: actions/cache@v2
+        name: Cache node_modules
+        with:
+          path: "node_modules"
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('yarn.lock') }}
+          restore-keys: ${{ runner.os }}-node_modules
+
+      - uses: actions/cache@v2
+        name: Cache scalajs-bundler node_modules
+        with:
+          path: "*/target/**/main/node_modules"
+          key: ${{ runner.os }}-scalajsbundler-node_modules-${{ hashFiles('*/yarn.lock') }}
+          restore-keys: ${{ runner.os }}-scalajsbundler-node_modules
+
+      - name: Cache Scalablytyped transpilations
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.ivy2/local/org.scalablytyped
+            ~/.cache/scalablytyped
+          key: ${{ runner.os }}-scalablytyped-${{ hashfiles('build.sbt') }}-${{ hashFiles('*/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-scalablytyped-
+
+      - name: Build and Test
+        run: sbt scalafmtCheckAll test fastOptJS/webpack 
+
+      - name: Build production assets
+        if: github.ref == 'refs/heads/master'
+        run: |
+          sbt prod
+
+      - name: Deploy to Github Pages
+        if: github.ref == 'refs/heads/master'
+        uses: JamesIves/github-pages-deploy-action@v4.2.5
+        with:
+          branch: gh-pages # The branch the action should deploy to.
+          folder: webapp/target/scala-2.13/scalajs-bundler/main/dist # The folder the action should deploy.
+
+#      - name: Debug over SSH (tmate)
+#        # if: ${{ failure() }}
+#        uses: mxschmitt/action-tmate@v3
+#        with:
+#          limit-access-to-actor: true
